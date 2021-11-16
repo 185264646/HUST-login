@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 macString=
 modulus=
@@ -35,7 +35,7 @@ e=INTEGER:0x${exponent}"
 
 function pass_pad_zero() {
 	pass_path=$(mktemp)
-	TMPFILE="$TMPFILE $pass_path"
+	TMP_FILE="$TMP_FILE $pass_path"
 	len=${#1}
 	if [[ $len -gt $2 ]]; then
 		echo "password too long."
@@ -60,13 +60,13 @@ function get_public_key_param() {
 
 function get_public_key_pem() {
 	openssl asn1parse -genconf $1 -out ${pem_path:=$(mktemp)} >/dev/null
-	TMP_PATH="$TMP_PATH $pem_path"
+	TMP_FILE="$TMP_FILE $pem_path"
 	return 0
 }
 
 function generate_encrypted_password() {
 	ASN_PATH=$(mktemp)
-	TMP_PATH="$TMP_PATH $ASN_PATH"
+	TMP_FILE="$TMP_FILE $ASN_PATH"
 	generate_asn "$ASN_PATH"
 	get_public_key_pem "$ASN_PATH"
 	pass_pad_zero "$1>$macString" 128
@@ -109,11 +109,11 @@ function judge_if_connected_to_internet() {
 
 function exit_handler() { # delete all temp files before exiting for security
 	if [[ -n "$TMP_FILE" ]];then
-		rm "$TMP_FILE"
+		rm $TMP_FILE
 	fi
 }
 
-trap exit_handler 0
+trap "exit_handler" exit 
 while getopts 'u:p:' opt; do
 	case "$opt" in
 		u)
