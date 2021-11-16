@@ -35,6 +35,7 @@ e=INTEGER:0x${exponent}"
 
 function pass_pad_zero() {
 	pass_path=$(mktemp)
+	TMPFILE="$TMPFILE $pass_path"
 	len=${#1}
 	if [[ $len -gt $2 ]]; then
 		echo "password too long."
@@ -59,11 +60,13 @@ function get_public_key_param() {
 
 function get_public_key_pem() {
 	openssl asn1parse -genconf $1 -out ${pem_path:=$(mktemp)} >/dev/null
+	TMP_PATH="$TMP_PATH $pem_path"
 	return 0
 }
 
 function generate_encrypted_password() {
 	ASN_PATH=$(mktemp)
+	TMP_PATH="$TMP_PATH $ASN_PATH"
 	generate_asn "$ASN_PATH"
 	get_public_key_pem "$ASN_PATH"
 	pass_pad_zero "$1>$macString" 128
@@ -104,7 +107,13 @@ function judge_if_connected_to_internet() {
 	fi
 }
 
-trap 0
+function exit_handler() { # delete all temp files before exiting for security
+	if [[ -n "$TMP_FILE" ]];then
+		rm "$TMP_FILE"
+	fi
+}
+
+trap exit_handler 0
 while getopts 'u:p:' opt; do
 	case "$opt" in
 		u)
@@ -121,6 +130,10 @@ while getopts 'u:p:' opt; do
 			;;
 	esac
 done
+if [[ $# -ne 4 ]];then
+	echo "Usage: $0 -u {UserID} -p {password}"
+	exit 1
+fi
 if judge_if_connected_to_internet ;then
 	echo "Seems that you have connected to the Internet."
 	exit 0
