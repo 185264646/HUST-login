@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 
 macString=
 modulus=
@@ -100,11 +100,17 @@ function send_login_request() { #send_login_request(HOST queryString user_name) 
 }
 
 function judge_if_connected_to_internet() {
-	if curl -s -m 3 123.123.123.123 >/dev/null; then
-		return 1 
-	else
+	result=$(curl -s -m 3 www.msftncsi.com/ncsi.txt)
+	if [[ $? -ne 0 ]]; then
+		return 2 
+	elif [[ $result == "Microsoft NCSI" ]]; then
 		return 0
 	fi
+	return 1
+}
+
+function syntax_helper() {
+	echo "Usage: $0 -u userID -p password "
 }
 
 function exit_handler() { # delete all temp files before exiting for security
@@ -125,13 +131,13 @@ while getopts 'u:p:' opt; do
 			;;
 
 		?)
-			echo "Usage: $0 -u {UserID} -p {password}"
+			syntax_helper
 			exit 1
 			;;
 	esac
 done
-if [[ $# -ne 4 ]];then
-	echo "Usage: $0 -u {UserID} -p {password}"
+if [[ -z $user || -z $pass ]];then
+	syntax_helper
 	exit 1
 fi
 if judge_if_connected_to_internet ;then
