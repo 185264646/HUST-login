@@ -1,6 +1,9 @@
-# HUST_WIRELESS登陆脚本
-- 每次登录时会自动从接口处动态获取最新的公钥进行加密，再也不怕学校突然换密钥了
-- 依赖jq curl openssl bash sed. 其中需要单独安装的只有jq
-
+# 简介
+这是一个登录到HUST\_WIRELESS的脚本
+# 依赖
+bash, curl, xxd, openssl, jq  
+对于大多数发行版来说只有jq需要单独安装，其他依赖已经由系统自带
 # 用法
-- `./login.sh -u [UserId] -p [password]`
+见`./login -h`
+# License
+GPL-2.0-or-later

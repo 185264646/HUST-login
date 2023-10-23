@@ -1,159 +1,379 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (r) 2023, Yang Xiwen
+#
+# A bash script to login to HUST_WIRELESS
+# Dependency: openssl, jq, curl and many utils provided by coreutils or busybox
 
-macString=
-modulus=
-exponent=
-pem_path=
-pass_path=
-encrypted_path=
-TMP_FILE=
+### Config Variables ###
 
-function generate_asn() {
-	head="
- # Start with a SEQUENCE
- asn1=SEQUENCE:pubkeyinfo
-	 
- # pubkeyinfo contains an algorithm identifier and the public key wrapped
- # in a BIT STRING
- [pubkeyinfo]
- algorithm=SEQUENCE:rsa_alg
- pubkey=BITWRAP,SEQUENCE:rsapubkey
+# Default timeout for curl operations (sec)
+readonly CURL_TMOUT=3
 
- # algorithm ID for RSA is just an OID and a NULL
- [rsa_alg]
- algorithm=OID:rsaEncryption
- parameter=NULL
+### Global Variables ###
+username=
+password=
+cert_path=
+padded_pass_path=
 
- # Actual public key: modulus and exponent
- [rsapubkey]
- "
-	head="${head}n=INTEGER:0x${modulus}
-e=INTEGER:0x${exponent}"
-	echo "$head">$1
-	return 0
-}
+### Helper Functions ###
 
-function pass_pad_zero() {
-	pass_path=$(mktemp)
-	TMP_FILE="$TMP_FILE $pass_path"
-	len=${#1}
-	if [[ $len -gt $2 ]]; then
-		echo "password too long."
-		exit 1;
+# A wrapper around curl
+quite_curl() {
+	curl -s --connect-timeout $CURL_TMOUT $*
+	if [ $? -ne 0 ]; then
+		network_error_handler
 	fi
-	let len=$2-len
-	while [[ $len -ne 0 ]]; do
-		let len--
-		echo -ne \\0>>"$pass_path"
+}
+
+# print all arguments to stderr
+log() {
+	# move stderr to stdout, and print to stdout
+	# see https://www.gnu.org/software/bash/manual/html_node/Redirections.html Section 3.6.9 Moving File Descriptors
+	1>&2- printf %s\\n "$*"
+}
+
+internal_err() {
+	log "Internal Error"
+	exit 2
+}
+
+### Exception Handlers ###
+#
+network_error_handler() {
+	log "Network is down!"
+	exit 2
+}
+
+exit_handler() {
+	rm -f "$cert_path" "$padded_pass_path"
+}
+
+### Main functions ###
+
+# parse login page, echo the redirect URL
+#
+# parameters:
+# $1: page
+# 
+# returns:
+# 0 - OK
+# 1 - Invalid page
+parse_page() {
+	ret="$(sed -ne "s/^<script>.*='\(.*\)'<\/script>/\1/p" <<< "$1")"
+	if [ -z "$ret" ]; then
+		# no matching
+		return 1
+	fi
+	printf %s "$ret"
+}
+
+# get host from url
+# parse URL to get host
+# example: http://baidu.com/?abc -> baidu.com
+# 
+# echo:
+# host
+#
+# return:
+# 0 - success
+# 1 - invalid URL
+#
+# note: for simplicity, this function is not robust. don't feed with unauthorized content
+get_host_from_url() {
+	# URL has 3 parts: prefix, host, path
+	local host
+	host="$(sed -ne 's/^[[:alnum:]]*:\/\/\([^/]*\).*$/\1/p' <<< "$1")"
+	if [ -z host ]; then
+		return 1
+	fi
+	printf %s "$host"
+}
+
+# parse URL
+# e.g.: http://baidu.com/?param1=2&param2=3
+# -> [[_host] = baidu.com, [param1]=2, [param2]=3]
+#
+# param:
+# $1 - URL
+# $2 - var name
+function parse_url() {
+	# nested variable is not allowed in bash
+	declare -gA _url_param
+	declare -gn "$2"=_url_param
+	_url_param[_host]="$(get_host_from_url "$1")" || return
+	local params="$(extract_params_from_url "$1")" || return
+	for i in $(tr '&' ' ' <<< "$params")
+	do
+		# $i is xx=xxx
+		local name="${i%=[^=]*}"
+		local val="${i#[^=]*=}"
+		_url_param["$name"]="$val"
 	done
-	echo -n "$1">>"$pass_path"
 }
 
-function get_public_key_param() {
-	URL="$1/eportal/InterFace.do?method=pageInfo"
-	POST_DATA="queryString="
-	JSON=$(curl -sd "$POST_DATA" "$URL")
-	modulus=$(echo "$JSON" | jq -r .publicKeyModulus)
-	exponent=$(echo "$JSON" | jq -r .publicKeyExponent)
-	return 0
+# extract arguments in URL
+# e.g.: http://baidu.com/?param1=2&param2=3 -> param1=2&param2=3
+# param:
+# $1: URL
+# 
+# return 0
+#
+# echo: arguments
+extract_params_from_url() {
+	local params=$(sed -ne 's/^[^?]*?\(.*\)$/\1/p' <<< "$1")
+	if [ -z "$params" ]; then
+		return 1
+	fi
+	printf %s "$params"
 }
 
-function get_public_key_pem() {
-	openssl asn1parse -genconf $1 -out ${pem_path:=$(mktemp)} >/dev/null
-	TMP_FILE="$TMP_FILE $pem_path"
-	return 0
+# extract a paramter from URL
+# param
+# $1 - param
+# $2 - URL
+extract_param_from_url() {
+	local params
+	# extract parameters from URL
+	params="$(extract_params_from_url "$1")"
+	if [ $? -ne 0]; then
+		return
+	fi
+	# split arguments to multiple records
+	<<<"$params" awk "BEGIN { RS=\"&\" } { if (\$1 ~ /^$1=/) { print \$1; exit 0 } } END { exit 1 }"
 }
 
-function generate_encrypted_password() {
-	ASN_PATH=$(mktemp)
-	TMP_FILE="$TMP_FILE $ASN_PATH"
-	generate_asn "$ASN_PATH"
-	get_public_key_pem "$ASN_PATH"
-	pass_pad_zero "$1>$macString" 128
-	encrypted_pass=$(openssl rsautl -encrypt -pubin -keyform=DER -inkey "$pem_path" -in "$pass_path" -raw | xxd -ps -c 256)
-	return 0
-}
-
-function login() { # login(user_name password)
-	REDIRECT=$(curl -s 123.123.123.123 | sed -e "s/[^']*'//" -e "s/'.*//")
-	HOST=$(echo $REDIRECT|sed -e "s/http:\/\///" -e "s/\/.*//")
-	QUERYSTRING=$(echo $REDIRECT|sed -e "s/.*?//")
-	macString=$(echo $REDIRECT|sed -e s/.*\&mac=// -e s/\&.*//)
-	get_public_key_param "$HOST"
-	generate_encrypted_password "$2"
-	send_login_request "$HOST" "$QUERYSTRING" "$1"
-	return $?
-}
-
-function send_login_request() { #send_login_request(HOST queryString user_name) (get passsword from global variables)
-	POST_DATA_1="userId=$3&password=$encrypted_pass&service="
-	POST_DATA_2="$2"
-	POST_DATA_3="operatorPwd=&opeeratorUserId=&validcode=&passwordEncrypt=true"
-	URL="http://$1/eportal/InterFace.do?method=login"
-	RET=$(curl -s -d "$POST_DATA_1" --data-urlencode "queryString=$POST_DATA_2" -d "$POST_DATA_3" "$URL")
-	if [[ $(echo "$RET"| jq .result) = '"success"' ]]; then
+# get current internet connection state
+#
+# side effects:
+# none
+#
+# echo:
+# redirection URL
+#
+# returns:
+# 0 - have internet access
+# 1 - need login
+# 2 - network is down
+# other - internal error
+get_cur_network_state() {
+	local page
+	local url
+	# TODO
+	# Enable DoT, DoH etc.. may also prevent us fron getting the redirect URL
+	page="$(quite_curl http://detectportal.firefox.com/)" || exit 2
+	# page="$(quite_curl http://1.1.1.1/)" || exit 2
+	if [ "$page" = success ]; then
 		return 0
 	else
-		echo "$RET"| jq -r .message
+		url="$(parse_page "$page")"
+		if [ $? -ne 0 ]; then
+			# Invalid redirection page
+			# Maybe either not HUST_WIRELESS or API changed
+			# Please file a Issue on Github
+			return 3
+		fi
+	fi
+
+	printf %s "$url"
+	return 1
+}
+
+# get encryption cert
+# get the RSA cert to encrypt password
+#
+# $1 - redir_url
+#
+# echo:
+# 	cert absolute path
+#
+# return:
+# 	0 - success
+# 	other - failure
+get_pub_cert() {
+	local host post_data url page_info
+	host="$(get_host_from_url $1)"
+	if [ $? -ne 0 ]; then
+		return $?
+	fi
+	post_data="queryString="
+	url="$host/eportal/InterFace.do?method=pageInfo"
+
+	page_info="$(quite_curl -d "$post_data" "$url")"
+
+	# parse page_info to get exponent and modulus
+	local exp mod
+	exp=$(printf %s "$page_info" | jq -r -e .publicKeyExponent) || return 1
+	mod=$(printf %s "$page_info" | jq -r -e .publicKeyModulus) || return 1
+
+	# output the public key file
+	# DER
+	local cert=$(mktemp)
+	openssl asn1parse -out "$cert" -noout -genconf - <<EOF
+# Copied directly from https://www.openssl.org/docs/manmaster/man3/ASN1_generate_nconf.html#EXAMPLES
+# Start with a SEQUENCE
+asn1=SEQUENCE:pubkeyinfo
+
+# pubkeyinfo contains an algorithm identifier and the public key wrapped
+# in a BIT STRING
+[pubkeyinfo]
+algorithm=SEQUENCE:rsa_alg
+pubkey=BITWRAP,SEQUENCE:rsapubkey
+
+# algorithm ID for RSA is just an OID and a NULL
+[rsa_alg]
+algorithm=OID:rsaEncryption
+parameter=NULL
+
+# Actual public key: modulus and exponent
+[rsapubkey]
+n=INTEGER:0x$mod
+e=INTEGER:0x$exp
+EOF
+	if [ $? -ne 0 ]; then
+		local ret=$?
+		rm "$cert"
+		return $ret
+	fi
+	printf %s "$cert"
+}
+
+# pad zero to string
+#
+# echo: '\0' padded(truncated) string
+#
+# param:
+# $1: string
+# $2: length
+pad_zero() {
+	local len=${#1}
+	if [ $len -gt $2 ]; then
+		# truncate
+		head -c $2 <<<"$1"
+	else
+		dd if=/dev/zero bs=1 count=$(( $2 - $len )) 2>/dev/null
+		printf %s "$1"
+	fi
+}
+
+# encrypt password
+#
+# echo:
+# encrypted password(hex)
+#
+# param:
+# $1 - password
+# $2 - cert path
+# $3 - macString
+#
+encrypt_pass() {
+	# pad password to 128
+	# must be padded to the end
+	local pass="$1>$3"
+	padded_pass_path="$(mktemp)"
+	>"$padded_pass_path" pad_zero "$pass" 128
+
+	# encrypt with cert
+	# use rsautl?
+	openssl pkeyutl -encrypt -pubin -keyform DER -inkey "$2" -in "$padded_pass_path" -pkeyopt rsa_padding_mode:none | xxd -ps -c 256
+
+	local ret=$?
+	rm -f "$padded_pass_path"
+
+	return $ret
+}
+
+# send login request
+#
+# param:
+# $1 - host
+# $2 - username
+# $3 - password
+# $4 - query string
+#
+# echo:
+# reason
+#
+# return:
+# 0 - success
+# non-zero - fail
+#
+send_login_req() {
+	local url="http://$1/eportal/InterFace.do?method=login"
+	local data_1="userId=$2&password=$3&service=&operatorPwd=&opeeratorUserId=&validcode=&passwordEncrypt=true"
+
+	local msg="$(quite_curl -d "$data_1" --data-urlencode "queryString=$4" "$url")"
+	local result="$(jq -r .result <<<"$msg")"
+	if [ "$result" = "success" ]; then
+		return 0
+	else
+		jq -r .message <<<"$msg"
 		return 1
 	fi
 }
 
-function judge_if_connected_to_internet() {
-	result=$(curl -s -m 3 www.msftncsi.com/ncsi.txt)
-	if [[ $? -ne 0 ]]; then
-		return 2 
-	elif [[ $result == "Microsoft NCSI" ]]; then
-		return 0
+# $1 - program name
+function print_syntax() {
+	echo "Usage: $1 -u UserId -p Password"
+	echo ""
+	echo "Example: $1 -u U202301001 -p 123456"
+}
+
+function parse_args() {
+	local opt
+	while getopts "u:p:" opt; do
+		case "$opt" in
+			u)
+				username="$OPTARG"
+				;;
+
+			p)
+				password="$OPTARG"
+				;;
+		esac
+	done
+	shift $(( $OPTIND - 1 ))
+	if [ -z "$username" -o -z "$password" -o $# -gt 0 ]; then
+		return 1;
 	fi
-	return 1
+	return 0
 }
 
-function syntax_helper() {
-	echo "Usage: $0 -u userID -p password "
-}
+trap exit_handler exit
 
-function exit_handler() { # delete all temp files before exiting for security
-	if [[ -n "$TMP_FILE" ]];then
-		rm $TMP_FILE
-	fi
-}
+parse_args $* || { print_syntax $0; exit 2; }
 
-trap "exit_handler" exit 
-while getopts 'u:p:' opt; do
-	case "$opt" in
-		u)
-			user="$OPTARG"
-			;;
+redir_url="$(get_cur_network_state)"
+case $? in
+	0)
+		log "Already connected to Internet"
+		exit 0
+		;;
 
-		p)
-			pass="$OPTARG"
-			;;
+	1)
+		# need login
+		;;
 
-		?)
-			syntax_helper
-			exit 1
-			;;
-	esac
-done
-if [[ -z $user || -z $pass ]];then
-	syntax_helper
-	exit 1
-fi
-if judge_if_connected_to_internet ;then
-	echo "Seems that you have connected to the Internet."
-	exit 0
-fi
+	2)
+		# network is down
+		exit 1
+		;;
 
-shift $(($OPTIND - 1))
-if [[ $# -gt 0 ]]; then
-	echo "Usage: $0 -u {UserID} -p {password}"
-	exit 1
-fi
-if login "$user" "$pass";then
-	echo "login success."
-	exit 0
-else
-	echo "login failed."
-	exit 1
-fi
+	?)
+		internal_err
+		;;
+esac
+
+# Try to get login parameters from login page
+cert_path=$(get_pub_cert "$redir_url") || internal_err
+
+query_string="$(extract_params_from_url "$redir_url")" || internal_err
+parse_url "$redir_url" "redir_url_info" || internal_err
+host="${redir_url_info[_host]}"
+[ -z "$host" ] && internal_err
+mac="${redir_url_info[mac]}"
+[ -z "$mac" ] && internal_err
+# encrypt password
+encrypted_pass=$(encrypt_pass "$password" "$cert_path" "$mac") || internal_err
+send_login_req "$host" "$username" "$encrypted_pass" "$query_string" && echo success || echo failed
+
