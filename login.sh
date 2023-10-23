@@ -375,5 +375,5 @@ mac="${redir_url_info[mac]}"
 [ -z "$mac" ] && internal_err
 # encrypt password
 encrypted_pass=$(encrypt_pass "$password" "$cert_path" "$mac") || internal_err
-send_login_req "$host" "$username" "$encrypted_pass" "$query_string" && echo success || echo failed
+send_login_req "$host" "$username" "$encrypted_pass" "$query_string" && echo success || { echo failed; exit 1; }
 
