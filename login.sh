@@ -84,7 +84,7 @@ get_host_from_url() {
 	# URL has 3 parts: prefix, host, path
 	local host
 	host="$(sed -ne 's/^[[:alnum:]]*:\/\/\([^/]*\).*$/\1/p' <<< "$1")"
-	if [ -z host ]; then
+	if [ -z "$host" ]; then
 		return 1
 	fi
 	printf %s "$host"
