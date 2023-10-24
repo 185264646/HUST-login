@@ -19,7 +19,7 @@ padded_pass_path=
 ### Helper Functions ###
 
 # A wrapper around curl
-quite_curl() {
+quiet_curl() {
 	curl -s --connect-timeout $CURL_TMOUT $*
 	if [ $? -ne 0 ]; then
 		network_error_handler
@@ -161,8 +161,8 @@ get_cur_network_state() {
 	local url
 	# TODO
 	# Enable DoT, DoH etc.. may also prevent us fron getting the redirect URL
-	page="$(quite_curl http://detectportal.firefox.com/)" || exit 2
-	# page="$(quite_curl http://1.1.1.1/)" || exit 2
+	page="$(quiet_curl http://detectportal.firefox.com/)" || exit 2
+	# page="$(quiet_curl http://34.107.221.82/)" || exit 2
 	if [ "$page" = success ]; then
 		return 0
 	else
@@ -199,7 +199,7 @@ get_pub_cert() {
 	post_data="queryString="
 	url="$host/eportal/InterFace.do?method=pageInfo"
 
-	page_info="$(quite_curl -d "$post_data" "$url")"
+	page_info="$(quiet_curl -d "$post_data" "$url")"
 
 	# parse page_info to get exponent and modulus
 	local exp mod
@@ -302,7 +302,7 @@ send_login_req() {
 	local url="http://$1/eportal/InterFace.do?method=login"
 	local data_1="userId=$2&password=$3&service=&operatorPwd=&opeeratorUserId=&validcode=&passwordEncrypt=true"
 
-	local msg="$(quite_curl -d "$data_1" --data-urlencode "queryString=$4" "$url")"
+	local msg="$(quiet_curl -d "$data_1" --data-urlencode "queryString=$4" "$url")"
 	local result="$(jq -r .result <<<"$msg")"
 	if [ "$result" = "success" ]; then
 		return 0
