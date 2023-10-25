@@ -20,8 +20,7 @@ padded_pass_path=
 
 # A wrapper around curl
 quiet_curl() {
-	curl -s --connect-timeout $CURL_TMOUT $*
-	if [ $? -ne 0 ]; then
+	if ! curl -s --connect-timeout $CURL_TMOUT "$@"; then
 		network_error_handler
 	fi
 }
@@ -99,10 +98,13 @@ get_host_from_url() {
 # $2 - var name
 function parse_url() {
 	# nested variable is not allowed in bash
+	unset _url_param
+	unset "$2"
 	declare -gA _url_param
 	declare -gn "$2"=_url_param
 	_url_param[_host]="$(get_host_from_url "$1")" || return
-	local params="$(extract_params_from_url "$1")" || return
+	local params
+	params="$(extract_params_from_url "$1")" || return
 	for i in $(tr '&' ' ' <<< "$params")
 	do
 		# $i is xx=xxx
@@ -121,7 +123,8 @@ function parse_url() {
 #
 # echo: arguments
 extract_params_from_url() {
-	local params=$(sed -ne 's/^[^?]*?\(.*\)$/\1/p' <<< "$1")
+	local params
+	params=$(sed -ne 's/^[^?]*?\(.*\)$/\1/p' <<< "$1")
 	if [ -z "$params" ]; then
 		return 1
 	fi
@@ -135,10 +138,7 @@ extract_params_from_url() {
 extract_param_from_url() {
 	local params
 	# extract parameters from URL
-	params="$(extract_params_from_url "$1")"
-	if [ $? -ne 0 ]; then
-		return
-	fi
+	params="$(extract_params_from_url "$1")" || return
 	# split arguments to multiple records
 	<<<"$params" awk "BEGIN { RS=\"&\" } { if (\$1 ~ /^$1=/) { print \$1; exit 0 } } END { exit 1 }"
 }
@@ -166,13 +166,10 @@ get_cur_network_state() {
 	if [ "$page" = success ]; then
 		return 0
 	else
-		url="$(parse_page "$page")"
-		if [ $? -ne 0 ]; then
-			# Invalid redirection page
-			# Maybe either not HUST_WIRELESS or API changed
-			# Please file a Issue on Github
-			return 3
-		fi
+		url="$(parse_page "$page")" || return 3
+		# Invalid redirection page
+		# Maybe either not HUST_WIRELESS or API changed
+		# Please file a Issue on Github
 	fi
 
 	printf %s "$url"
@@ -192,14 +189,11 @@ get_cur_network_state() {
 # 	other - failure
 get_pub_cert() {
 	local host post_data url page_info
-	host="$(get_host_from_url $1)"
-	if [ $? -ne 0 ]; then
-		return $?
-	fi
+	host="$(get_host_from_url "$1")" || return
 	post_data="queryString="
 	url="$host/eportal/InterFace.do?method=pageInfo"
 
-	page_info="$(quiet_curl -d "$post_data" "$url")"
+	page_info="$(quiet_curl -d "$post_data" "$url")" || return
 
 	# parse page_info to get exponent and modulus
 	local exp mod
@@ -208,8 +202,9 @@ get_pub_cert() {
 
 	# output the public key file
 	# DER
-	local cert=$(mktemp)
-	openssl asn1parse -out "$cert" -noout -genconf - <<EOF
+	local cert
+	cert="$(mktemp)"
+	openssl asn1parse -out "$cert" -noout -genconf - <<EOF ||
 # Copied directly from https://www.openssl.org/docs/manmaster/man3/ASN1_generate_nconf.html#EXAMPLES
 # Start with a SEQUENCE
 asn1=SEQUENCE:pubkeyinfo
@@ -230,11 +225,11 @@ parameter=NULL
 n=INTEGER:0x$mod
 e=INTEGER:0x$exp
 EOF
-	if [ $? -ne 0 ]; then
+	{
 		local ret=$?
 		rm "$cert"
 		return $ret
-	fi
+	}
 	printf %s "$cert"
 }
 
@@ -247,11 +242,11 @@ EOF
 # $2: length
 pad_zero() {
 	local len=${#1}
-	if [ $len -gt $2 ]; then
+	if [ "$len" -gt "$2" ]; then
 		# truncate
-		head -c $2 <<<"$1"
+		head -c "$2" <<<"$1"
 	else
-		dd if=/dev/zero bs=1 count=$(( $2 - $len )) 2>/dev/null
+		dd if=/dev/zero bs=1 count=$(( $2 - len )) 2>/dev/null
 		printf %s "$1"
 	fi
 }
@@ -302,8 +297,9 @@ send_login_req() {
 	local url="http://$1/eportal/InterFace.do?method=login"
 	local data_1="userId=$2&password=$3&service=&operatorPwd=&opeeratorUserId=&validcode=&passwordEncrypt=true"
 
-	local msg="$(quiet_curl -d "$data_1" --data-urlencode "queryString=$4" "$url")"
-	local result="$(jq -r .result <<<"$msg")"
+	local msg result
+	msg="$(quiet_curl -d "$data_1" --data-urlencode "queryString=$4" "$url")" || return
+	result="$(jq -r .result <<<"$msg")" || return
 	if [ "$result" = "success" ]; then
 		return 0
 	else
@@ -330,10 +326,15 @@ function parse_args() {
 			p)
 				password="$OPTARG"
 				;;
+
+			*)
+				print_syntax
+				exit 1
+				;;
 		esac
 	done
-	shift $(( $OPTIND - 1 ))
-	if [ -z "$username" -o -z "$password" -o $# -gt 0 ]; then
+	shift $(( OPTIND - 1 ))
+	if [ -z "$username" ] || [ -z "$password" ] || [ $# -gt 0 ]; then
 		return 1;
 	fi
 	return 0
@@ -341,7 +342,7 @@ function parse_args() {
 
 trap exit_handler exit
 
-parse_args $* || { print_syntax $0; exit 2; }
+parse_args "$@" || { print_syntax "$0"; exit 2; }
 
 redir_url="$(get_cur_network_state)"
 case $? in
@@ -368,12 +369,22 @@ esac
 cert_path=$(get_pub_cert "$redir_url") || internal_err
 
 query_string="$(extract_params_from_url "$redir_url")" || internal_err
+
+# the shellcheck has a false positive on this
+# declare it explicitly
+declare -gA redir_url_info
 parse_url "$redir_url" "redir_url_info" || internal_err
+
 host="${redir_url_info[_host]}"
 [ -z "$host" ] && internal_err
 mac="${redir_url_info[mac]}"
 [ -z "$mac" ] && internal_err
 # encrypt password
 encrypted_pass=$(encrypt_pass "$password" "$cert_path" "$mac") || internal_err
-send_login_req "$host" "$username" "$encrypted_pass" "$query_string" && echo success || { echo failed; exit 1; }
+if send_login_req "$host" "$username" "$encrypted_pass" "$query_string"; then
+	echo success
+else
+	echo failed
+	exit 1
+fi
 
