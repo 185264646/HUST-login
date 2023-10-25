@@ -359,7 +359,7 @@ case $? in
 		exit 1
 		;;
 
-	?)
+	*)
 		internal_err
 		;;
 esac
