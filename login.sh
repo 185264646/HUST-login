@@ -328,7 +328,7 @@ parse_args() {
 				;;
 
 			*)
-				print_syntax
+				print_syntax "$0"
 				exit 1
 				;;
 		esac
