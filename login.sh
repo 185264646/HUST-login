@@ -96,7 +96,7 @@ get_host_from_url() {
 # param:
 # $1 - URL
 # $2 - var name
-function parse_url() {
+parse_url() {
 	# nested variable is not allowed in bash
 	unset _url_param
 	unset "$2"
@@ -309,13 +309,13 @@ send_login_req() {
 }
 
 # $1 - program name
-function print_syntax() {
+print_syntax() {
 	echo "Usage: $1 -u UserId -p Password"
 	echo ""
 	echo "Example: $1 -u U202301001 -p 123456"
 }
 
-function parse_args() {
+parse_args() {
 	local opt
 	while getopts "u:p:" opt; do
 		case "$opt" in
