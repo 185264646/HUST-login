@@ -327,9 +327,8 @@ parse_args() {
 				password="$OPTARG"
 				;;
 
-			*)
-				print_syntax "$0"
-				exit 1
+			?)
+				return 1
 				;;
 		esac
 	done
