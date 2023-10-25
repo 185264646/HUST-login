@@ -136,7 +136,7 @@ extract_param_from_url() {
 	local params
 	# extract parameters from URL
 	params="$(extract_params_from_url "$1")"
-	if [ $? -ne 0]; then
+	if [ $? -ne 0 ]; then
 		return
 	fi
 	# split arguments to multiple records
