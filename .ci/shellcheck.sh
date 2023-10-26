@@ -1,3 +1,3 @@
 #!/bin/sh
 
-shellcheck -s bash $1
+shellcheck -s bash "$1"
