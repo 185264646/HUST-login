@@ -339,14 +339,12 @@ parse_args() {
 	return 0
 }
 
-set -eu
-
 trap exit_handler exit
 
 parse_args "$@" || { print_syntax "$0"; exit 2; }
 
-{ redir_url="$(get_cur_network_state)"; ret=$?; }
-case $ret in
+redir_url="$(get_cur_network_state)"
+case $? in
 	0)
 		log "Already connected to Internet"
 		exit 0
