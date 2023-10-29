@@ -119,13 +119,15 @@ parse_url() {
 	_url_param[_path]="$(get_path_from_url "$1")" || return
 	local params
 	params="$(extract_params_from_url "$1")" || return
-	for i in $(tr '&' ' ' <<< "$params")
-	do
+	local IFS_bak="$IFS"
+	IFS="&"
+	for i in $params; do
 		# $i is xx=xxx
 		local name="${i%=[^=]*}"
 		local val="${i#[^=]*=}"
 		_url_param["$name"]="$val"
 	done
+	IFS="$IFS_bak"
 }
 
 # extract arguments in URL
