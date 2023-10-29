@@ -82,7 +82,8 @@ parse_page() {
 get_host_from_url() {
 	# URL has 3 parts: prefix, host, path
 	local host
-	host="$(sed -ne 's/^[[:alnum:]]*:\/\/\([^/?]*\).*$/\1/p' <<< "$1")"
+	host="${1#*://}" # remove prefix
+	host="${host%%[/?]*}" # remove path and parameters
 	if [ -z "$host" ]; then
 		return 1
 	fi
@@ -99,7 +100,11 @@ get_host_from_url() {
 #
 # example: http://example.com/test/to/path -> /test/to/path
 get_path_from_url() {
-	sed -ne 's/^[[:alnum:]]*:\/\/[^/?]*\([^?]*\).*$/\1/p' <<<"$1"
+	# remove prefix and host
+	local path="/${1#*://*/}"
+	# remove params
+	local path="${path%%\?*}"
+	printf %s "$path"
 }
 
 # parse URL
@@ -140,7 +145,7 @@ parse_url() {
 # echo: arguments
 extract_params_from_url() {
 	local params
-	params=$(sed -ne 's/^[^?]*?\(.*\)$/\1/p' <<< "$1")
+	params="${1#*\?}"
 	if [ -z "$params" ]; then
 		return 0
 	fi
