@@ -1,0 +1,16 @@
+name: Auto release
+
+on:
+  push:
+    tags: "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.1.1
+      - name: Draft release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          files: login.sh
