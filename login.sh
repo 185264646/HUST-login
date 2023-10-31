@@ -89,6 +89,19 @@ get_host_from_url() {
 	printf %s "$host"
 }
 
+# get path from URL
+#
+# return: always 0
+#
+# echo path in URL
+#
+# if missing, nothing will be echoed
+#
+# example: http://example.com/test/to/path -> /test/to/path
+get_path_from_url() {
+	sed -ne 's/^[[:alnum:]]*:\/\/[^/?]*\([^?]*\).*$/\1/p' <<<"$1"
+}
+
 # parse URL
 # e.g.: http://baidu.com/?param1=2&param2=3
 # -> [[_host] = baidu.com, [param1]=2, [param2]=3]
@@ -103,6 +116,7 @@ parse_url() {
 	declare -gA _url_param
 	declare -gn "$2"=_url_param
 	_url_param[_host]="$(get_host_from_url "$1")" || return
+	_url_param[_path]="$(get_path_from_url "$1")" || return
 	local params
 	params="$(extract_params_from_url "$1")" || return
 	for i in $(tr '&' ' ' <<< "$params")
