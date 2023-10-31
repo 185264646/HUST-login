@@ -126,7 +126,7 @@ extract_params_from_url() {
 	local params
 	params=$(sed -ne 's/^[^?]*?\(.*\)$/\1/p' <<< "$1")
 	if [ -z "$params" ]; then
-		return 1
+		return 0
 	fi
 	printf %s "$params"
 }
