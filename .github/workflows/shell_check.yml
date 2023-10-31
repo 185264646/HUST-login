@@ -10,5 +10,5 @@ jobs:
       - name: Install Dependencies
         run: sudo apt install -y shellcheck
       - name: Run .ci/shellcheck.sh
-        run: .ci/shellcheck.sh login.sh
+        run: .ci/shellcheck.sh
 
