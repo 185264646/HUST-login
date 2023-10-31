@@ -1,3 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
-shellcheck -s bash "$1"
+shopt -s globstar
+if [ $# -eq 0 ]; then
+	shellcheck -s bash ./**/*.sh
+else
+	shellcheck -s bash "$1"
+fi
