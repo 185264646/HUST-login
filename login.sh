@@ -339,6 +339,11 @@ parse_args() {
 	return 0
 }
 
+# check if we are sourced
+# if we are sourced, it will succeed and return to parent shell
+# otherwise proceed login
+2>/dev/null return || true
+
 set -euo pipefail
 
 trap exit_handler exit
