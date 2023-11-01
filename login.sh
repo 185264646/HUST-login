@@ -59,12 +59,13 @@ exit_handler() {
 # 0 - OK
 # 1 - Invalid page
 parse_page() {
-	ret="$(sed -ne "s/^<script>.*='\(.*\)'<\/script>/\1/p" <<< "$1")"
-	if [ -z "$ret" ]; then
+	local url="${1#<script>*=\'}"
+	url="${url%\'</script>}"
+	if [ "$url" = "$1" ]; then
 		# no matching
 		return 1
 	fi
-	printf %s "$ret"
+	printf %s "$url"
 }
 
 # get host from url
