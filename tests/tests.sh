@@ -45,6 +45,14 @@ EOF
 http://172.18.18.60:8080/eportal/index.jsp?wlanuserip=ab280e44c4035567e98182ed0053c8d8&wlanacname=90e89a42a2b53b8eeaeb783ea002a860&ssid=&nasip=df7f31558658bbf53ad63427680e662b&snmpagentip=&mac=288e667de9c47c2e9bd3041dca23d1a5&t=wireless-v2&url=2c0328164651e2b477e0c5f1b4858b01&apmac=&nasid=90e89a42a2b53b8eeaeb783ea002a860&vid=5539c754309b9fbd&port=26ef2a2baeda521b&nasportid=5b9da5b08a53a540806c821ff7c143818feb119a511f0bcaaf0bc043567e281f
 EOF
 	assert 'parse_page "$login_page"' 0 "$url"
+
+	# a random page
+	# shellcheck disable=SC2034
+	local baidu='<html>
+<meta http-equiv="refresh" content="0;url=http://www.baidu.com/">
+</html>
+'
+	assert 'parse_page "$baidu"' 1
 }
 
 test_parse_url() {
