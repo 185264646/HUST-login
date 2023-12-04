@@ -28,7 +28,7 @@ quiet_curl() {
 # print all arguments to stderr
 log() {
 	# move stderr to stdout, and print to stdout
-	# see https://www.gnu.org/software/bash/manual/html_node/Redirections.html Section 3.6.9 Moving File Descriptors
+	# see https://www.gnu.org/software/bash/manual/html_node/Redirections.html#Moving-File-Descriptors
 	1>&2- printf %s\\n "$*"
 }
 
