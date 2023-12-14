@@ -60,7 +60,9 @@ exit_handler() {
 # 1 - Invalid page
 parse_page() {
 	local url="${1#<script>*=\'}"
-	url="${url%\'</script>}"
+	# Note there is a trailing \r
+	# \x27 is ', however, vim sh.vim syntax file fails to parse \'
+	url="${url%$'\x27</script>\r'}"
 	if [ "$url" = "$1" ]; then
 		# no matching
 		return 1
