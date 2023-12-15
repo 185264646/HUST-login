@@ -6,5 +6,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.1.1
-      - name: run tests.sh
-        run: (cd tests && ./tests.sh)
+      - name: make check
+        run: make check
