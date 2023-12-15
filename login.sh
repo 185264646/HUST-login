@@ -62,7 +62,8 @@ parse_page() {
 	local url="${1#<script>*=\'}"
 	# Note there is a trailing \r
 	# \x27 is ', however, vim sh.vim syntax file fails to parse \'
-	url="${url%$'\x27</script>\r'}"
+	# The following assignment can't be wrapped by "", due to a bug in early bash.
+	url=${url%$'\x27</script>\r'}
 	if [ "$url" = "$1" ]; then
 		# no matching
 		return 1
@@ -185,8 +186,7 @@ get_cur_network_state() {
 	local url
 	# TODO
 	# Enable DoT, DoH etc.. may also prevent us fron getting the redirect URL
-	page="$(quiet_curl http://detectportal.firefox.com/)" || exit 2
-	# page="$(quiet_curl http://34.107.221.82/)" || exit 2
+	page="$(quiet_curl http://detectportal.firefox.com/)" || page="$(quiet_curl http://34.107.221.82/)" || exit 2
 	if [ "$page" = success ]; then
 		return 0
 	else
