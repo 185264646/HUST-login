@@ -379,7 +379,7 @@ ret=0
 redir_url="$(get_cur_network_state)" || { ret=$?; true; }
 case $ret in
 	0)
-		log "Already connected to Internet"
+		log "Already connected to the Internet"
 		exit 0
 		;;
 
