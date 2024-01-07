@@ -222,8 +222,8 @@ get_pub_cert() {
 
 	# parse page_info to get exponent and modulus
 	local exp mod
-	exp=$(printf %s "$page_info" | jq -r -e .publicKeyExponent) || return 1
-	mod=$(printf %s "$page_info" | jq -r -e .publicKeyModulus) || return 1
+	exp=$(<<<"$page_info" jq -r -e .publicKeyExponent) || return 1
+	mod=$(<<<"$page_info" jq -r -e .publicKeyModulus) || return 1
 
 	# output the public key file
 	# DER
