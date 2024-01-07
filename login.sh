@@ -63,6 +63,7 @@ parse_page() {
 	# Note there is a trailing \r
 	# \x27 is ', however, vim sh.vim syntax file fails to parse \'
 	# The following assignment can't be wrapped by "", due to a bug in early bash.
+	# See https://www.gnu.org/software/bash/manual/html_node/ANSI_002dC-Quoting.html
 	url=${url%$'\x27</script>\r'}
 	if [ "$url" = "$1" ]; then
 		# no matching
