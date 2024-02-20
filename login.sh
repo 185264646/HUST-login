@@ -9,6 +9,14 @@
 
 # Default timeout for curl operations (sec)
 readonly CURL_TMOUT=3
+if [ -e /dev/stdin ]; then
+	# This path is the most generic way to reference STDIN on most UNIX systems
+	readonly STDIN=/dev/stdin
+else
+	# Some old OpenWrt system does not have /dev/stdin
+ 	# use procfs directly instead
+ 	readonly STDIN=/proc/self/fd/0
+fi
 
 ### Global Variables ###
 username=
@@ -229,7 +237,7 @@ get_pub_cert() {
 	# DER
 	local cert
 	cert="$(mktemp)"
-	openssl asn1parse -out "$cert" -noout -genconf - <<EOF ||
+	openssl asn1parse -out "$cert" -noout -genconf "$STDIN" <<EOF ||
 # Copied directly from https://www.openssl.org/docs/manmaster/man3/ASN1_generate_nconf.html#EXAMPLES
 # Start with a SEQUENCE
 asn1=SEQUENCE:pubkeyinfo
